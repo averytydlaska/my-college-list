@@ -465,10 +465,60 @@ input:focus,select:focus,textarea:focus{border-color:#8fb4ef;box-shadow:0 0 0 4p
 .sync-badge.online{background:#e2f1df;color:#245c3c}
 .auth-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:650px){.auth-grid{grid-template-columns:1fr}.auth-user{display:none}}
+
+/* PRIVATE ACCOUNT GATE + USER PROFILE */
+body.auth-locked{overflow:hidden}
+#authGate{
+ position:fixed;inset:0;z-index:9999;display:grid;place-items:center;padding:24px;
+ background:
+ radial-gradient(circle at 85% 12%,rgba(169,200,255,.55),transparent 22rem),
+ radial-gradient(circle at 12% 88%,rgba(205,228,187,.55),transparent 24rem),
+ #f6f1e8;
+}
+#authGate.hidden{display:none!important}
+.auth-gate-card{
+ width:min(460px,100%);background:#fffdf8;border:1px solid #dedbd0;border-radius:28px;
+ padding:32px;box-shadow:0 22px 70px rgba(23,63,50,.12)
+}
+.auth-gate-brand{display:flex;align-items:center;gap:12px;margin-bottom:26px}
+.auth-gate-mark{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:#dce8ff;color:#173f32;font-weight:900;font-size:20px}
+.auth-gate-brand h1{margin:0;font-size:25px;letter-spacing:-.8px}
+.auth-gate-brand p{margin:3px 0 0;color:var(--muted);font-size:12px}
+.auth-gate-card h2{font-size:30px;letter-spacing:-1.2px;margin:0 0 8px}
+.auth-gate-card>p{color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 22px}
+.auth-gate-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.auth-error{min-height:18px;margin-top:12px;font-size:12px;color:#b84b54}
+.profile-hero{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
+.profile-avatar{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:#dce8ff;color:#173f32;font-size:22px;font-weight:900}
+.profile-identity{display:flex;align-items:center;gap:14px}
+.profile-email{font-weight:800;font-size:17px}
+.profile-small{font-size:11px;color:var(--muted);margin-top:3px}
+.profile-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px}
+.profile-stat{padding:14px;border:1px solid var(--border);border-radius:14px;background:#faf8f2}
+.profile-stat b{display:block;font-size:22px}.profile-stat span{font-size:11px;color:var(--muted)}
+@media(max-width:650px){.auth-gate-card{padding:23px;border-radius:22px}.auth-gate-actions,.profile-stats{grid-template-columns:1fr}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body>
+<body class="auth-locked">
+
+<div id="authGate">
+ <div class="auth-gate-card">
+  <div class="auth-gate-brand"><div class="auth-gate-mark">M</div><div><h1>My College List</h1><p>College applications, organized.</p></div></div>
+  <h2>Welcome back.</h2>
+  <p>Sign in to access your private college list, essays, deadlines, calendar, and tasks.</p>
+  <label>Email</label>
+  <input id="gateEmail" type="email" autocomplete="email" placeholder="you@example.com">
+  <label>Password</label>
+  <input id="gatePassword" type="password" autocomplete="current-password" placeholder="Password">
+  <div class="auth-gate-actions">
+   <button class="primary" onclick="gateSignIn()">Sign in</button>
+   <button class="secondary" onclick="gateSignUp()">Create account</button>
+  </div>
+  <div id="gateError" class="auth-error"></div>
+ </div>
+</div>
+
 <div class="app">
 <aside class="sidebar">
   <div class="brand"><div class="brand-mark">A</div><div><div class="brand-name">My College List</div><div class="brand-sub">COLLEGE APPLICATION TRACKER</div></div></div>
@@ -477,6 +527,7 @@ input:focus,select:focus,textarea:focus{border-color:#8fb4ef;box-shadow:0 0 0 4p
   <button class="nav-btn" data-page="calendar" onclick="showPage('calendar')"><span class="nav-icon">▦</span> Calendar</button>
   <button class="nav-btn" data-page="colleges" onclick="showPage('colleges')"><span class="nav-icon">◎</span> Colleges</button>
   <button class="nav-btn" data-page="tasks" onclick="showPage('tasks')"><span class="nav-icon">✓</span> To-Do List</button>
+<button class="nav-btn" data-page="profile" onclick="showPage('profile')"><span class="nav-icon">●</span> My Profile</button>
   <div class="nav-label" style="margin-top:24px">Data</div>
   <button class="nav-btn" data-page="backup" onclick="showPage('backup')"><span class="nav-icon">⇩</span> Backup & Restore</button>
   <div class="sidebar-note">Your information is stored locally in this browser. Download backups regularly.</div>
@@ -488,6 +539,7 @@ input:focus,select:focus,textarea:focus{border-color:#8fb4ef;box-shadow:0 0 0 4p
 <button data-page="calendar" onclick="showPage('calendar')">Calendar</button>
 <button data-page="colleges" onclick="showPage('colleges')">Colleges</button>
 <button data-page="tasks" onclick="showPage('tasks')">To-Do</button>
+<button data-page="profile" onclick="showPage('profile')">Profile</button>
 <button data-page="backup" onclick="showPage('backup')">Backup</button>
 </div>
 
@@ -555,6 +607,32 @@ input:focus,select:focus,textarea:focus{border-color:#8fb4ef;box-shadow:0 0 0 4p
 </div>
 </div>
 <div class="card"><div class="card-title"><h3>Tasks</h3></div><div id="taskList"></div></div>
+</section>
+
+<section id="profilePage" class="hidden">
+<div class="page-head"><div><h2>My Profile</h2><p>Your private My College List account and cloud-sync status.</p></div></div>
+<div class="card">
+ <div class="profile-hero">
+  <div class="profile-identity">
+   <div id="profileAvatar" class="profile-avatar">M</div>
+   <div><div id="profileEmail" class="profile-email"></div><div class="profile-small">Private cloud profile</div></div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+   <button class="secondary" onclick="saveCloudData()">Sync now</button>
+   <button class="danger" onclick="signOutCloud()">Sign out</button>
+  </div>
+ </div>
+ <div class="profile-stats">
+  <div class="profile-stat"><b id="profileCollegeCount">0</b><span>Colleges</span></div>
+  <div class="profile-stat"><b id="profileEssayCount">0</b><span>Essays</span></div>
+  <div class="profile-stat"><b id="profileTaskCount">0</b><span>Other tasks</span></div>
+ </div>
+</div>
+<div class="card">
+ <div class="card-title"><h3>Cloud storage</h3><span id="profileSyncStatus" class="pill green">Synced</span></div>
+ <p class="muted">Your application data is stored under your signed-in Supabase account. Other users who sign in receive their own separate profile and data.</p>
+ <button class="secondary" onclick="exportData()">Download personal backup</button>
+</div>
 </section>
 
 <section id="backupPage" class="hidden">
@@ -644,11 +722,26 @@ function seedSpreadsheetEssays(){
  if(changed)saveData();
 }
 
-const pageInfo={dashboard:["Dashboard","Your application season at a glance."],calendar:["Calendar","Every deadline, organized by date."],colleges:["Colleges","Manage applications and essays."],tasks:["To-Do List","Focus on what needs to happen next."],backup:["Backup & Restore","Keep your application data safe."]};
+const pageInfo={dashboard:["Dashboard","Your application season at a glance."],calendar:["Calendar","Every deadline, organized by date."],colleges:["Colleges","Manage applications and essays."],tasks:["To-Do List","Focus on what needs to happen next."],profile:["My Profile","Your private account and cloud sync."],backup:["Backup & Restore","Keep your application data safe."]};
 
+function userCacheKey(kind,userId){return `mycollegelist:${userId}:${kind}`}
+function saveLocalForUser(){
+ if(!cloudUser)return;
+ localStorage.setItem(userCacheKey("colleges",cloudUser.id),JSON.stringify(colleges));
+ localStorage.setItem(userCacheKey("otherTasks",cloudUser.id),JSON.stringify(otherTasks));
+}
+function loadLocalForUser(userId){
+ try{
+  colleges=JSON.parse(localStorage.getItem(userCacheKey("colleges",userId)))||[];
+  otherTasks=JSON.parse(localStorage.getItem(userCacheKey("otherTasks",userId)))||[];
+ }catch{colleges=[];otherTasks=[]}
+}
 function saveData(){
- localStorage.setItem("colleges",JSON.stringify(colleges));
- localStorage.setItem("otherTasks",JSON.stringify(otherTasks));
+ if(cloudUser)saveLocalForUser();
+ else{
+  localStorage.setItem("colleges",JSON.stringify(colleges));
+  localStorage.setItem("otherTasks",JSON.stringify(otherTasks));
+ }
  if(cloudUser&&!cloudLoading){
   clearTimeout(cloudSaveTimer);
   cloudSaveTimer=setTimeout(saveCloudData,500);
@@ -658,107 +751,104 @@ async function saveCloudData(){
  if(!cloudUser)return;
  setSyncStatus("Saving…",false);
  const {error}=await cloudClient.from("user_app_data").upsert({
-  user_id:cloudUser.id,
-  colleges:colleges,
-  other_tasks:otherTasks,
-  updated_at:new Date().toISOString()
+  user_id:cloudUser.id,colleges,other_tasks:otherTasks,updated_at:new Date().toISOString()
  },{onConflict:"user_id"});
- if(error){
-  console.error("Cloud save failed",error);
-  setSyncStatus("Sync error",false);
- }else setSyncStatus("Synced",true);
+ if(error){console.error(error);setSyncStatus("Sync error",false)}
+ else{saveLocalForUser();setSyncStatus("Synced",true)}
+ updateProfileUI();
 }
 async function loadCloudData(){
  if(!cloudUser)return;
- cloudLoading=true;
- setSyncStatus("Loading…",false);
+ cloudLoading=true;setSyncStatus("Loading…",false);
  const {data,error}=await cloudClient.from("user_app_data").select("colleges,other_tasks").eq("user_id",cloudUser.id).maybeSingle();
- if(error){
-  console.error("Cloud load failed",error);
-  setSyncStatus("Sync error",false);
-  cloudLoading=false;
-  return;
- }
+ if(error){console.error(error);loadLocalForUser(cloudUser.id);cloudLoading=false;renderEverything();setSyncStatus("Sync error",false);return}
  if(data){
   colleges=Array.isArray(data.colleges)?data.colleges:[];
   otherTasks=Array.isArray(data.other_tasks)?data.other_tasks:[];
-  localStorage.setItem("colleges",JSON.stringify(colleges));
-  localStorage.setItem("otherTasks",JSON.stringify(otherTasks));
+  saveLocalForUser();
  }else{
+  // First account on this browser may claim the pre-cloud legacy data once.
+  const legacyClaimed=localStorage.getItem("mycollegelist:legacyClaimed");
+  if(!legacyClaimed){
+   try{
+    colleges=JSON.parse(localStorage.getItem("colleges"))||[];
+    otherTasks=JSON.parse(localStorage.getItem("otherTasks"))||[];
+   }catch{colleges=[];otherTasks=[]}
+   localStorage.setItem("mycollegelist:legacyClaimed",cloudUser.id);
+  }else{
+   loadLocalForUser(cloudUser.id);
+  }
   await cloudClient.from("user_app_data").insert({
    user_id:cloudUser.id,colleges,other_tasks:otherTasks,updated_at:new Date().toISOString()
   });
+  saveLocalForUser();
  }
- cloudLoading=false;
- renderEverything();
- setSyncStatus("Synced",true);
+ cloudLoading=false;renderEverything();setSyncStatus("Synced",true);updateProfileUI();
 }
 function setSyncStatus(text,online){
- const el=document.getElementById("syncStatus");
- if(!el)return;
- el.textContent=text;
- el.classList.toggle("online",!!online);
+ const el=document.getElementById("syncStatus");if(el){el.textContent=text;el.classList.toggle("online",!!online)}
+ const p=document.getElementById("profileSyncStatus");if(p)p.textContent=text;
 }
+function setGate(show){
+ document.getElementById("authGate").classList.toggle("hidden",!show);
+ document.body.classList.toggle("auth-locked",show);
+}
+function gateMessage(msg){const el=document.getElementById("gateError");if(el)el.textContent=msg||""}
 function updateAuthUI(){
- const btn=document.getElementById("authButton");
- const label=document.getElementById("authUser");
- if(!btn||!label)return;
+ const btn=document.getElementById("authButton"),label=document.getElementById("authUser");
  if(cloudUser){
-  btn.textContent="Sign out";
-  btn.onclick=signOutCloud;
-  label.textContent=cloudUser.email||"Signed in";
-  setSyncStatus("Synced",true);
+  if(btn){btn.textContent="Profile";btn.onclick=()=>showPage("profile")}
+  if(label)label.textContent=cloudUser.email||"Signed in";
+  setGate(false);setSyncStatus("Synced",true);
  }else{
-  btn.textContent="Sign in";
-  btn.onclick=openAuthModal;
-  label.textContent="";
-  setSyncStatus("Local",false);
+  if(btn){btn.textContent="Sign in";btn.onclick=()=>setGate(true)}
+  if(label)label.textContent="";
+  setGate(true);setSyncStatus("Signed out",false);
  }
+ updateProfileUI();
 }
-function openAuthModal(){
- openModal("My College List account",`
- <p class="muted">Sign in to sync your colleges, essays, deadlines, and tasks across devices.</p>
- <label>Email</label><input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com">
- <label>Password</label><input id="authPassword" type="password" autocomplete="current-password" placeholder="Password">
- <div style="display:flex;gap:8px;flex-wrap:wrap">
-  <button class="primary" onclick="signInCloud()">Sign in</button>
-  <button class="secondary" onclick="signUpCloud()">Create account</button>
- </div>
- <p class="muted" style="font-size:11px;margin-top:14px">The first time you sign in, your existing local My College List data will be uploaded if your cloud account does not already contain data.</p>
- `);
+function updateProfileUI(){
+ if(!cloudUser)return;
+ const email=cloudUser.email||"Account";
+ const pe=document.getElementById("profileEmail");if(pe)pe.textContent=email;
+ const pa=document.getElementById("profileAvatar");if(pa)pa.textContent=(email[0]||"M").toUpperCase();
+ const pc=document.getElementById("profileCollegeCount");if(pc)pc.textContent=colleges.length;
+ const ec=document.getElementById("profileEssayCount");if(ec)ec.textContent=colleges.reduce((n,c)=>n+(c.essays||[]).length,0);
+ const tc=document.getElementById("profileTaskCount");if(tc)tc.textContent=otherTasks.length;
 }
-async function signInCloud(){
- const email=document.getElementById("authEmail").value.trim();
- const password=document.getElementById("authPassword").value;
- if(!email||!password){alert("Enter your email and password.");return}
+async function gateSignIn(){
+ gateMessage("");
+ const email=document.getElementById("gateEmail").value.trim(),password=document.getElementById("gatePassword").value;
+ if(!email||!password){gateMessage("Enter your email and password.");return}
  const {data,error}=await cloudClient.auth.signInWithPassword({email,password});
- if(error){alert(error.message);return}
- cloudUser=data.user;
- closeModal();updateAuthUI();await loadCloudData();
+ if(error){gateMessage(error.message);return}
+ cloudUser=data.user;updateAuthUI();await loadCloudData();
 }
-async function signUpCloud(){
- const email=document.getElementById("authEmail").value.trim();
- const password=document.getElementById("authPassword").value;
- if(!email||!password){alert("Enter an email and password.");return}
- if(password.length<6){alert("Use a password with at least 6 characters.");return}
+async function gateSignUp(){
+ gateMessage("");
+ const email=document.getElementById("gateEmail").value.trim(),password=document.getElementById("gatePassword").value;
+ if(!email||!password){gateMessage("Enter an email and password.");return}
+ if(password.length<6){gateMessage("Use a password with at least 6 characters.");return}
  const {data,error}=await cloudClient.auth.signUp({
-  email,password,
-  options:{emailRedirectTo:"https://averytydlaska.github.io/my-college-list/"}
+  email,password,options:{emailRedirectTo:window.location.origin+window.location.pathname}
  });
- if(error){alert(error.message);return}
- if(data.session){
-  cloudUser=data.user;closeModal();updateAuthUI();await loadCloudData();
- }else{
-  alert("Account created. Check your email for Supabase's confirmation link, then return here and sign in.");
- }
+ if(error){gateMessage(error.message);return}
+ if(data.session){cloudUser=data.user;updateAuthUI();await loadCloudData()}
+ else gateMessage("Account created. Check your email for the confirmation link, then return here and sign in.");
 }
+function openAuthModal(){setGate(true)}
+async function signInCloud(){return gateSignIn()}
+async function signUpCloud(){return gateSignUp()}
 async function signOutCloud(){
- await saveCloudData();
+ if(cloudUser)await saveCloudData();
  await cloudClient.auth.signOut();
  cloudUser=null;
+ colleges=[];otherTasks=[];
  updateAuthUI();
+ showPage("dashboard");
 }
 async function initializeCloud(){
+ setGate(true);
  const {data}=await cloudClient.auth.getSession();
  cloudUser=data.session?.user||null;
  updateAuthUI();
@@ -766,16 +856,14 @@ async function initializeCloud(){
  cloudClient.auth.onAuthStateChange((event,session)=>{
   const next=session?.user||null;
   if((next?.id||null)!==(cloudUser?.id||null)){
-   cloudUser=next;
-   updateAuthUI();
+   cloudUser=next;updateAuthUI();
    if(cloudUser)setTimeout(loadCloudData,0);
   }
  });
 }
-
 function uid(){return Date.now()+Math.floor(Math.random()*10000)}
 function escapeHTML(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
-function showPage(page){["dashboard","calendar","colleges","tasks","backup"].forEach(p=>document.getElementById(p+"Page").classList.add("hidden"));document.getElementById(page+"Page").classList.remove("hidden");document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===page));document.getElementById("topTitle").textContent=pageInfo[page][0];document.getElementById("topSubtitle").textContent=pageInfo[page][1];renderEverything();window.scrollTo(0,0)}
+function showPage(page){["dashboard","calendar","colleges","tasks","profile","backup"].forEach(p=>document.getElementById(p+"Page").classList.add("hidden"));document.getElementById(page+"Page").classList.remove("hidden");document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===page));document.getElementById("topTitle").textContent=pageInfo[page][0];document.getElementById("topSubtitle").textContent=pageInfo[page][1];renderEverything();window.scrollTo(0,0)}
 function addCollege(){const name=document.getElementById("collegeName").value.trim(),deadline=document.getElementById("collegeDeadline").value,status=document.getElementById("collegeStatus").value,notes=document.getElementById("collegeNotes").value.trim();if(!name||!deadline){alert("Enter a college name and deadline.");return}colleges.push({id:uid(),name,deadline,status,notes,submitted:["Submitted","Accepted","Waitlisted","Denied"].includes(status),essays:[]});document.getElementById("collegeName").value="";document.getElementById("collegeDeadline").value="";document.getElementById("collegeNotes").value="";document.getElementById("collegeStatus").value="Not Started";saveData();renderEverything()}
 function addEssay(){const collegeId=Number(document.getElementById("essayCollege").value),name=document.getElementById("essayName").value.trim(),deadline=document.getElementById("essayDeadline").value,wordLimit=Number(document.getElementById("essayLimit").value)||0,words=Number(document.getElementById("essayWords").value)||0,status=document.getElementById("essayStatus").value;if(!collegeId||!name||!deadline){alert("Choose a college and enter the essay name and due date.");return}const c=colleges.find(x=>x.id===collegeId);c.essays.push({id:uid(),name,deadline,wordLimit,words,status,completed:status==="Complete"});["essayName","essayDeadline","essayLimit","essayWords"].forEach(id=>document.getElementById(id).value="");document.getElementById("essayStatus").value="Not Started";saveData();renderEverything()}
 function addTask(){const name=document.getElementById("taskName").value.trim(),deadline=document.getElementById("taskDeadline").value;if(!name||!deadline){alert("Enter a task and due date.");return}otherTasks.push({id:uid(),name,deadline,completed:false});document.getElementById("taskName").value="";document.getElementById("taskDeadline").value="";saveData();renderEverything()}
