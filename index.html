@@ -1102,7 +1102,7 @@ function formatDate(date){if(!date)return "No date entered";const d=new Date(dat
 function openModal(title,html){document.getElementById("modalTitle").textContent=title;document.getElementById("modalBody").innerHTML=html;document.getElementById("modal").classList.remove("hidden")}
 function closeModal(){document.getElementById("modal").classList.add("hidden")}
 function editCollege(id){const c=colleges.find(c=>c.id===id);openModal("Edit college",`<label>College name</label><input id="editCName" value="${escapeHTML(c.name)}"><label>Deadline</label><input id="editCDate" type="date" value="${c.deadline}"><label>Status</label><select id="editCStatus">${["Not Started","In Progress","Ready to Submit","Submitted","Accepted","Waitlisted","Denied","Withdrawn"].map(s=>`<option ${c.status===s?"selected":""}>${s}</option>`).join("")}</select><label>Notes</label><textarea id="editCNotes">${escapeHTML(c.notes)}</textarea><button class="primary" onclick="saveCollegeEdit(${id})">Save changes</button>`)}
-function saveCollegeEdit(id){const c=colleges.find(c=>c.id===id);c.name=document.getElementById("editCName").value.trim();c.deadline=document.getElementById("editCDate").value;c.status=document.getElementById("editCStatus").value;c.notes=document.getElementById("editCNotes").value.trim();c.submitted=["Submitted","Accepted","Waitlisted","Denied"].includes(c.status);if(!c.name||!c.deadline){alert("College name and deadline are required.");return}saveData();closeModal();renderEverything()}
+function saveCollegeEdit(id){const c=colleges.find(c=>c.id===id);const oldDeadline=c.deadline;c.name=document.getElementById("editCName").value.trim();c.deadline=document.getElementById("editCDate").value;c.status=document.getElementById("editCStatus").value;c.notes=document.getElementById("editCNotes").value.trim();c.submitted=["Submitted","Accepted","Waitlisted","Denied"].includes(c.status);if(!c.name||!c.deadline){alert("College name and deadline are required.");return}if(c.deadline!==oldDeadline){(c.essays||[]).forEach(e=>e.deadline=c.deadline)}saveData();closeModal();renderEverything()}
 function editEssay(cid,eid){const e=colleges.find(c=>c.id===cid).essays.find(e=>e.id===eid);openModal("Edit essay",`<label>Essay name</label><input id="editEName" value="${escapeHTML(e.name)}"><label>Prompt / instructions</label><textarea id="editEPrompt">${escapeHTML(e.prompt||"")}</textarea><div class="grid2"><div><label>Due date</label><input id="editEDate" type="date" value="${e.deadline}"></div><div><label>Progress</label><select id="editEStatus">${["Not Started","Brainstorming","Drafting","Revising","Complete"].map(s=>`<option ${e.status===s?"selected":""}>${s}</option>`).join("")}</select></div></div><div class="grid2"><div><label>Word limit</label><input id="editELimit" type="number" min="0" value="${e.wordLimit||""}"></div><div><label>Current words</label><input id="editEWords" type="number" min="0" value="${e.words||""}"></div></div><button class="primary" onclick="saveEssayEdit(${cid},${eid})">Save changes</button>`)}
 function saveEssayEdit(cid,eid){const e=colleges.find(c=>c.id===cid).essays.find(e=>e.id===eid);e.name=document.getElementById("editEName").value.trim();e.prompt=document.getElementById("editEPrompt").value.trim();e.deadline=document.getElementById("editEDate").value;e.wordLimit=Number(document.getElementById("editELimit").value)||0;e.words=Number(document.getElementById("editEWords").value)||0;e.status=document.getElementById("editEStatus").value;e.completed=e.status==="Complete";if(!e.name||!e.deadline){alert("Essay name and due date are required.");return}saveData();closeModal();renderEverything()}
 function editOther(id){const t=otherTasks.find(t=>t.id===id);openModal("Edit deadline",`<label>Task</label><input id="editTName" value="${escapeHTML(t.name)}"><label>Due date</label><input id="editTDate" type="date" value="${t.deadline}"><label style="font-weight:500"><input class="checkbox" id="editTDone" type="checkbox" ${t.completed?"checked":""}>Complete</label><br><br><button class="primary" onclick="saveOtherEdit(${id})">Save changes</button>`)}
@@ -1227,11 +1227,33 @@ function importApplyFlowData(){
 
 function exportData(){const data={version:3,exported:new Date().toISOString(),colleges,otherTasks},blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="college-application-tracker-backup.json";a.click();URL.revokeObjectURL(url)}
 function importData(){const file=document.getElementById("importFile").files[0];if(!file){alert("Choose a backup file first.");return}if(!confirm("Restore this backup? Your current tracker data will be replaced."))return;const r=new FileReader();r.onload=e=>{try{const d=JSON.parse(e.target.result);if(!Array.isArray(d.colleges)||!Array.isArray(d.otherTasks))throw new Error();colleges=d.colleges;otherTasks=d.otherTasks;saveData();alert("Backup restored successfully.");location.reload()}catch{alert("That does not appear to be a valid College Application Tracker backup.")}};r.readAsText(file)}
+function consolidateUSCShortAnswers(){
+ const usc=colleges.find(c=>c.name==="University of Southern California");
+ if(!usc||!Array.isArray(usc.essays))return;
+ const shorts=usc.essays.filter(e=>/^USC Short Take — /.test(e.name||""));
+ if(!shorts.length)return;
+ const existing=usc.essays.find(e=>e.name==="USC Short Answers");
+ const prompts=shorts.map(e=>`${e.name.replace("USC Short Take — ","")}: ${e.prompt||""}`).join("\\n\\n");
+ if(existing){
+  existing.prompt=prompts;
+  existing.deadline=usc.deadline||existing.deadline||"";
+  existing.requirement="Required short-answer set";
+ }else{
+  usc.essays.push({
+   id:uid(),name:"USC Short Answers",prompt:prompts,deadline:usc.deadline||"",
+   wordLimit:"Short responses",words:0,status:"Not Started",completed:false,
+   requirement:"Required short-answer set",choiceGroup:"USC short takes",importKey:"USC::short-answers-combined"
+  });
+ }
+ usc.essays=usc.essays.filter(e=>!/^USC Short Take — /.test(e.name||""));
+ saveData();
+}
 function renderEverything(){renderColleges();renderTasks();renderDashboard();renderCalendar()}
 document.getElementById("modal").addEventListener("click",e=>{if(e.target.id==="modal")closeModal()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
 migrateUCApplications();
 seedSpreadsheetEssays();
+consolidateUSCShortAnswers();
 renderEverything();
 initializeNetworkStatus();
 initializeCloud();
