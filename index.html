@@ -497,6 +497,16 @@ body.auth-locked{overflow:hidden}
 .profile-stat{padding:14px;border:1px solid var(--border);border-radius:14px;background:#faf8f2}
 .profile-stat b{display:block;font-size:22px}.profile-stat span{font-size:11px;color:var(--muted)}
 @media(max-width:650px){.auth-gate-card{padding:23px;border-radius:22px}.auth-gate-actions,.profile-stats{grid-template-columns:1fr}}
+
+/* PRODUCTION SAFEGUARDS */
+.auth-link{border:0;background:transparent;color:#416aa8;padding:7px 0;font-size:11px;text-decoration:underline}
+.onboarding{background:#edf5ff;border:1px solid #cbdcff;border-radius:16px;padding:16px;margin-bottom:18px}
+.onboarding h3{margin:0 0 6px;font-size:16px}.onboarding p{margin:0 0 12px;font-size:12px;color:var(--muted)}
+.onboarding-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.onboarding-step{padding:10px;border-radius:11px;background:#fffdf8;border:1px solid var(--border);font-size:11px}
+.test-result{padding:11px 12px;border-radius:11px;font-size:12px;margin-top:10px;background:#f1f2f6}
+.test-result.good{background:#e2f1df;color:#245c3c}.test-result.bad{background:#fff0ef;color:#b84b54}
+@media(max-width:650px){.onboarding-steps{grid-template-columns:1fr}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -515,6 +525,7 @@ body.auth-locked{overflow:hidden}
    <button class="primary" onclick="gateSignIn()">Sign in</button>
    <button class="secondary" onclick="gateSignUp()">Create account</button>
   </div>
+  <button class="auth-link" onclick="sendPasswordReset()">Forgot password?</button>
   <div id="gateError" class="auth-error"></div>
  </div>
 </div>
@@ -555,6 +566,16 @@ body.auth-locked{overflow:hidden}
 
 <main>
 <section id="dashboardPage">
+<div id="onboardingPanel" class="onboarding hidden">
+ <h3>Welcome to My College List</h3>
+ <p>Your account is private and cloud-synced. Three quick steps will get your workspace ready.</p>
+ <div class="onboarding-steps">
+  <div class="onboarding-step"><strong>1. Add or import colleges</strong><br>Use Colleges or Import Data.</div>
+  <div class="onboarding-step"><strong>2. Add essays & deadlines</strong><br>Track writing and other tasks.</div>
+  <div class="onboarding-step"><strong>3. Keep a backup</strong><br>Download a personal backup anytime.</div>
+ </div>
+ <button class="secondary small" style="margin-top:10px" onclick="dismissOnboarding()">Got it</button>
+</div>
 <div class="page-head"><div><h2>Application overview</h2><p>Stay ahead of every application, essay, and deadline.</p></div></div>
 <div class="stats" id="stats"></div>
 <div class="grid2">
@@ -632,6 +653,12 @@ body.auth-locked{overflow:hidden}
  <div class="card-title"><h3>Cloud storage</h3><span id="profileSyncStatus" class="pill green">Synced</span></div>
  <p class="muted">Your application data is stored under your signed-in Supabase account. Other users who sign in receive their own separate profile and data.</p>
  <button class="secondary" onclick="exportData()">Download personal backup</button>
+</div>
+<div class="card">
+ <div class="card-title"><h3>Privacy & sync check</h3><span class="pill blue">RLS</span></div>
+ <p class="muted">Run a self-test to confirm this session can retrieve only the cloud row associated with the currently signed-in account.</p>
+ <button class="secondary" onclick="runPrivacyCheck()">Run privacy check</button>
+ <div id="privacyTestResult" class="hidden"></div>
 </div>
 </section>
 
@@ -783,7 +810,7 @@ async function loadCloudData(){
   });
   saveLocalForUser();
  }
- cloudLoading=false;renderEverything();setSyncStatus("Synced",true);updateProfileUI();
+ cloudLoading=false;renderEverything();setSyncStatus("Synced",true);updateProfileUI();updateOnboarding();
 }
 function setSyncStatus(text,online){
  const el=document.getElementById("syncStatus");if(el){el.textContent=text;el.classList.toggle("online",!!online)}
@@ -815,6 +842,49 @@ function updateProfileUI(){
  const pc=document.getElementById("profileCollegeCount");if(pc)pc.textContent=colleges.length;
  const ec=document.getElementById("profileEssayCount");if(ec)ec.textContent=colleges.reduce((n,c)=>n+(c.essays||[]).length,0);
  const tc=document.getElementById("profileTaskCount");if(tc)tc.textContent=otherTasks.length;
+ updateOnboarding();
+}
+async function sendPasswordReset(){
+ gateMessage("");
+ const email=document.getElementById("gateEmail").value.trim();
+ if(!email){gateMessage("Enter your email first, then choose Forgot password.");return}
+ const {error}=await cloudClient.auth.resetPasswordForEmail(email,{
+  redirectTo:window.location.origin+window.location.pathname
+ });
+ if(error){gateMessage(error.message);return}
+ gateMessage("Password reset email sent. Open the link in your email to continue.");
+}
+function updateOnboarding(){
+ const panel=document.getElementById("onboardingPanel");
+ if(!panel||!cloudUser)return;
+ const dismissed=localStorage.getItem(userCacheKey("onboardingDismissed",cloudUser.id))==="yes";
+ const newAccount=colleges.length===0&&otherTasks.length===0;
+ panel.classList.toggle("hidden",dismissed||!newAccount);
+}
+function dismissOnboarding(){
+ if(cloudUser)localStorage.setItem(userCacheKey("onboardingDismissed",cloudUser.id),"yes");
+ updateOnboarding();
+}
+async function runPrivacyCheck(){
+ const box=document.getElementById("privacyTestResult");
+ if(!box||!cloudUser)return;
+ box.className="test-result";
+ box.textContent="Checking cloud access…";
+ const {data,error}=await cloudClient.from("user_app_data").select("user_id");
+ if(error){
+  box.className="test-result bad";
+  box.textContent="Privacy check could not complete: "+error.message;
+  return;
+ }
+ const rows=Array.isArray(data)?data:[];
+ const onlyOwn=rows.every(r=>r.user_id===cloudUser.id)&&rows.length<=1;
+ if(onlyOwn){
+  box.className="test-result good";
+  box.textContent="Passed: this session can only retrieve its own user data row.";
+ }else{
+  box.className="test-result bad";
+  box.textContent="Attention: this session retrieved unexpected user rows. Do not invite additional users until the Supabase RLS policies are reviewed.";
+ }
 }
 async function gateSignIn(){
  gateMessage("");
@@ -846,6 +916,15 @@ async function signOutCloud(){
  colleges=[];otherTasks=[];
  updateAuthUI();
  showPage("dashboard");
+}
+function initializeNetworkStatus(){
+ const refresh=()=>{
+  if(!navigator.onLine)setSyncStatus("Offline",false);
+  else if(cloudUser)setSyncStatus("Synced",true);
+ };
+ window.addEventListener("online",()=>{refresh();if(cloudUser)saveCloudData()});
+ window.addEventListener("offline",refresh);
+ refresh();
 }
 async function initializeCloud(){
  setGate(true);
@@ -1154,6 +1233,7 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
 migrateUCApplications();
 seedSpreadsheetEssays();
 renderEverything();
+initializeNetworkStatus();
 initializeCloud();
 </script>
 </body>
