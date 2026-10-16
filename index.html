@@ -457,7 +457,16 @@ input:focus,select:focus,textarea:focus{border-color:#8fb4ef;box-shadow:0 0 0 4p
   }
 }
 
+
+/* CLOUD SYNC / AUTH */
+.auth-area{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.auth-user{font-size:11px;color:var(--muted);max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sync-badge{font-size:10px;font-weight:750;padding:5px 8px;border-radius:999px;background:#f1f2f6;color:#667085}
+.sync-badge.online{background:#e2f1df;color:#245c3c}
+.auth-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:650px){.auth-grid{grid-template-columns:1fr}.auth-user{display:none}}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 <div class="app">
@@ -484,7 +493,12 @@ input:focus,select:focus,textarea:focus{border-color:#8fb4ef;box-shadow:0 0 0 4p
 
 <header class="topbar">
 <div><h1 id="topTitle">Dashboard</h1><p id="topSubtitle">Your application season at a glance.</p></div>
+<div class="auth-area">
+<span id="syncStatus" class="sync-badge">Local</span>
+<span id="authUser" class="auth-user"></span>
+<button id="authButton" class="secondary" onclick="openAuthModal()">Sign in</button>
 <button class="primary" onclick="showPage('colleges')">+ Add application</button>
+</div>
 </header>
 
 <main>
@@ -566,7 +580,18 @@ input:focus,select:focus,textarea:focus{border-color:#8fb4ef;box-shadow:0 0 0 4p
 <script>
 let colleges=JSON.parse(localStorage.getItem("colleges"))||[];
 let otherTasks=JSON.parse(localStorage.getItem("otherTasks"))||[];
+
 let calendarDate=new Date();
+
+const SUPABASE_URL="https://mkntrkezrabnpychdghg.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY="sb_publishable_C7waqfioFZJtOPeqnPaSJA_aoGno5YB";
+const cloudClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
+ auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+});
+let cloudUser=null;
+let cloudSaveTimer=null;
+let cloudLoading=false;
+
 
 colleges.forEach(c=>{if(!c.status)c.status="Not Started";if(c.notes===undefined)c.notes="";if(c.submitted===undefined)c.submitted=["Submitted","Accepted","Waitlisted","Denied"].includes(c.status);if(!c.essays)c.essays=[];c.essays.forEach(e=>{if(!e.status)e.status=e.completed?"Complete":"Not Started";if(e.wordLimit===undefined)e.wordLimit=0;if(e.words===undefined)e.words=0;e.completed=e.status==="Complete"})});
 otherTasks.forEach(t=>{if(t.completed===undefined)t.completed=false});saveData();
@@ -621,7 +646,133 @@ function seedSpreadsheetEssays(){
 
 const pageInfo={dashboard:["Dashboard","Your application season at a glance."],calendar:["Calendar","Every deadline, organized by date."],colleges:["Colleges","Manage applications and essays."],tasks:["To-Do List","Focus on what needs to happen next."],backup:["Backup & Restore","Keep your application data safe."]};
 
-function saveData(){localStorage.setItem("colleges",JSON.stringify(colleges));localStorage.setItem("otherTasks",JSON.stringify(otherTasks))}
+function saveData(){
+ localStorage.setItem("colleges",JSON.stringify(colleges));
+ localStorage.setItem("otherTasks",JSON.stringify(otherTasks));
+ if(cloudUser&&!cloudLoading){
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer=setTimeout(saveCloudData,500);
+ }
+}
+async function saveCloudData(){
+ if(!cloudUser)return;
+ setSyncStatus("Saving…",false);
+ const {error}=await cloudClient.from("user_app_data").upsert({
+  user_id:cloudUser.id,
+  colleges:colleges,
+  other_tasks:otherTasks,
+  updated_at:new Date().toISOString()
+ },{onConflict:"user_id"});
+ if(error){
+  console.error("Cloud save failed",error);
+  setSyncStatus("Sync error",false);
+ }else setSyncStatus("Synced",true);
+}
+async function loadCloudData(){
+ if(!cloudUser)return;
+ cloudLoading=true;
+ setSyncStatus("Loading…",false);
+ const {data,error}=await cloudClient.from("user_app_data").select("colleges,other_tasks").eq("user_id",cloudUser.id).maybeSingle();
+ if(error){
+  console.error("Cloud load failed",error);
+  setSyncStatus("Sync error",false);
+  cloudLoading=false;
+  return;
+ }
+ if(data){
+  colleges=Array.isArray(data.colleges)?data.colleges:[];
+  otherTasks=Array.isArray(data.other_tasks)?data.other_tasks:[];
+  localStorage.setItem("colleges",JSON.stringify(colleges));
+  localStorage.setItem("otherTasks",JSON.stringify(otherTasks));
+ }else{
+  await cloudClient.from("user_app_data").insert({
+   user_id:cloudUser.id,colleges,other_tasks:otherTasks,updated_at:new Date().toISOString()
+  });
+ }
+ cloudLoading=false;
+ renderEverything();
+ setSyncStatus("Synced",true);
+}
+function setSyncStatus(text,online){
+ const el=document.getElementById("syncStatus");
+ if(!el)return;
+ el.textContent=text;
+ el.classList.toggle("online",!!online);
+}
+function updateAuthUI(){
+ const btn=document.getElementById("authButton");
+ const label=document.getElementById("authUser");
+ if(!btn||!label)return;
+ if(cloudUser){
+  btn.textContent="Sign out";
+  btn.onclick=signOutCloud;
+  label.textContent=cloudUser.email||"Signed in";
+  setSyncStatus("Synced",true);
+ }else{
+  btn.textContent="Sign in";
+  btn.onclick=openAuthModal;
+  label.textContent="";
+  setSyncStatus("Local",false);
+ }
+}
+function openAuthModal(){
+ openModal("My College List account",`
+ <p class="muted">Sign in to sync your colleges, essays, deadlines, and tasks across devices.</p>
+ <label>Email</label><input id="authEmail" type="email" autocomplete="email" placeholder="you@example.com">
+ <label>Password</label><input id="authPassword" type="password" autocomplete="current-password" placeholder="Password">
+ <div style="display:flex;gap:8px;flex-wrap:wrap">
+  <button class="primary" onclick="signInCloud()">Sign in</button>
+  <button class="secondary" onclick="signUpCloud()">Create account</button>
+ </div>
+ <p class="muted" style="font-size:11px;margin-top:14px">The first time you sign in, your existing local My College List data will be uploaded if your cloud account does not already contain data.</p>
+ `);
+}
+async function signInCloud(){
+ const email=document.getElementById("authEmail").value.trim();
+ const password=document.getElementById("authPassword").value;
+ if(!email||!password){alert("Enter your email and password.");return}
+ const {data,error}=await cloudClient.auth.signInWithPassword({email,password});
+ if(error){alert(error.message);return}
+ cloudUser=data.user;
+ closeModal();updateAuthUI();await loadCloudData();
+}
+async function signUpCloud(){
+ const email=document.getElementById("authEmail").value.trim();
+ const password=document.getElementById("authPassword").value;
+ if(!email||!password){alert("Enter an email and password.");return}
+ if(password.length<6){alert("Use a password with at least 6 characters.");return}
+ const {data,error}=await cloudClient.auth.signUp({
+  email,password,
+  options:{emailRedirectTo:"https://averytydlaska.github.io/my-college-list/"}
+ });
+ if(error){alert(error.message);return}
+ if(data.session){
+  cloudUser=data.user;closeModal();updateAuthUI();await loadCloudData();
+ }else{
+  alert("Account created. Check your email for Supabase's confirmation link, then return here and sign in.");
+ }
+}
+async function signOutCloud(){
+ await saveCloudData();
+ await cloudClient.auth.signOut();
+ cloudUser=null;
+ updateAuthUI();
+}
+async function initializeCloud(){
+ const {data}=await cloudClient.auth.getSession();
+ cloudUser=data.session?.user||null;
+ updateAuthUI();
+ if(cloudUser)await loadCloudData();
+ cloudClient.auth.onAuthStateChange((event,session)=>{
+  const next=session?.user||null;
+  if((next?.id||null)!==(cloudUser?.id||null)){
+   cloudUser=next;
+   updateAuthUI();
+   if(cloudUser)setTimeout(loadCloudData,0);
+  }
+ });
+}
+
 function uid(){return Date.now()+Math.floor(Math.random()*10000)}
 function escapeHTML(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
 function showPage(page){["dashboard","calendar","colleges","tasks","backup"].forEach(p=>document.getElementById(p+"Page").classList.add("hidden"));document.getElementById(page+"Page").classList.remove("hidden");document.querySelectorAll("[data-page]").forEach(b=>b.classList.toggle("active",b.dataset.page===page));document.getElementById("topTitle").textContent=pageInfo[page][0];document.getElementById("topSubtitle").textContent=pageInfo[page][1];renderEverything();window.scrollTo(0,0)}
@@ -915,6 +1066,7 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
 migrateUCApplications();
 seedSpreadsheetEssays();
 renderEverything();
+initializeCloud();
 </script>
 </body>
 </html>
